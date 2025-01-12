@@ -66,9 +66,7 @@ python main.py /path/to/source /path/to/target1 /path/to/target2 /path/to/target
 ```
 
 Options
--p, --policy: Choose conflict resolution policy
-    -manual: Prompt for user input when conflicts occur (default)
-    -newest: Automatically keep the newest file
+-p, --policy: Choose conflict resolution policy: "manual": Prompt for user input when conflicts occur (default) OR "newest"
 
 --debug: Enable detailed debug logging
 
