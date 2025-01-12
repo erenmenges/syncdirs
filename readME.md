@@ -1,6 +1,14 @@
-# Directory Synchronization Tool
+# Syncdirs
 
 A robust, multi-threaded Python application that provides real-time, decentralized synchronization between multiple directories. The tool continuously monitors specified directories for changes and ensures they stay synchronized, without requiring a central source of truth.
+
+## Table of Contents
+
+- [Description](#description)
+- [Key Features](#key-features)
+- [Limitations](#limitations)
+- [Warning](#warning)
+- [Installation and Usage](#installation-and-usage)
 
 ## Description
 
@@ -36,8 +44,8 @@ Although it is THOROUGHLY tested and IT WORKS PROPERLY, this project is a work i
 1. Clone the repository:
 
 ```bash
-git clone https://github.com/yourusername/directory-sync-tool.git
-cd directory-sync-tool
+git https://github.com/erenmenges/syncdirs.git
+cd syncdirs
 ```
 
 2. Create and activate a virtual environment (recommended):
