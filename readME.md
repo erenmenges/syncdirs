@@ -12,7 +12,11 @@ A robust, multi-threaded Python application that provides real-time, decentraliz
 
 ## Description
 
-This tool enables decentralized, bidirectional synchronization across multiple directories, automatically detecting and propagating file changes (creation, modification, and deletion) in real-time. Any directory can initiate changes, and all changes are propagated to other directories in the sync network. It features automatic conflict resolution, extensive logging capabilities, and a thread-safe architecture for reliable performance.
+This tool enables decentralized, bidirectional synchronization across multiple directories, automatically detecting and propagating file changes (creation, modification, and deletion) in real-time. . It features automatic conflict resolution, extensive logging capabilities, and a thread-safe architecture for reliable performance.
+
+When the program is first run, the first argument is the source directory. The rest of the arguments are the target directories. All directories are synced to each other.
+
+After the first run, the directories become decentralized. Any directory can initiate changes, and all changes are propagated to other directories in the sync network.
 
 ## Key Features
 
@@ -63,8 +67,9 @@ python main.py /path/to/source /path/to/target1 /path/to/target2 /path/to/target
 
 Options
 -p, --policy: Choose conflict resolution policy
-    manual: Prompt for user input when conflicts occur (default)
-    newest: Automatically keep the newest file
+manual: Prompt for user input when conflicts occur (default)
+newest: Automatically keep the newest file
+
 --debug: Enable detailed debug logging
 
 Examples:
