@@ -1,0 +1,14 @@
+# macOS system files
+.DS_Store
+
+# Test directories
+test1/
+test2/
+test3/
+
+
+# Python cache files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd 

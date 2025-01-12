@@ -12,20 +12,27 @@ from ConflictResolver import ResolutionPolicy
 # Add logging configuration at the top
 logging.basicConfig(
     level=logging.INFO,
-    format='[%(name)s] %(message)s',
+    format='[%(name)s] %(levelname)s: %(message)s',
     handlers=[
         logging.StreamHandler()
     ]
 )
 
 class DirectorySynchronizer:
-    def __init__(self, directories: List[str], resolution_policy: ResolutionPolicy = ResolutionPolicy.MANUAL):
+    def __init__(self, directories: List[str], resolution_policy: ResolutionPolicy = ResolutionPolicy.MANUAL, debug: bool = False):
         """
         Initialize the directory synchronizer with a list of directories to keep in sync.
         The first directory in the list will be the initial source.
         """
         self.logger = logging.getLogger('MAIN')
-        self.logger.info('Initializing DirectorySynchronizer')
+        
+        # Set logging level based on debug flag
+        if debug:
+            self.logger.setLevel(logging.DEBUG)
+        else:
+            self.logger.setLevel(logging.INFO)
+        
+        self.logger.debug('Initializing DirectorySynchronizer')
         
         # Validate directories
         for directory in directories:
@@ -33,7 +40,7 @@ class DirectorySynchronizer:
                 self.logger.error(f'Directory does not exist: {directory}')
                 raise ValueError(f"Directory does not exist: {directory}")
             
-        self.logger.info(f'Validated {len(directories)} directories')
+        self.logger.debug(f'Validated {len(directories)} directories')
         
         self.directories = [os.path.abspath(d) for d in directories]
         self.watchers = {dir_path: Watcher() for dir_path in self.directories}
@@ -43,37 +50,37 @@ class DirectorySynchronizer:
         self.sync_condition = threading.Condition(self.lock)
         self.is_syncing = False
         
-        self.logger.info(f'Using resolution policy: {resolution_policy}')
+        self.logger.debug(f'Using resolution policy: {resolution_policy}')
         
     def _initialize_metadata(self):
         """Initialize metadata for the first directory and sync others with it."""
-        self.logger.info('Initializing metadata')
+        self.logger.debug('Initializing metadata')
         source_dir = self.directories[0]
         target_dirs = self.directories[1:]
         
-        self.logger.info(f'Scanning source directory: {source_dir}')
+        self.logger.debug(f'Scanning source directory: {source_dir}')
         self.watchers[source_dir].scan_directories(source_dir)
         
         # Initial sync of other directories
-        self.logger.info('Starting initial sync of target directories')
+        self.logger.info('Starting initial synchronization')
         sync_manager = SyncManager(source_dir, target_dirs, self.resolution_policy)
         initial_changes = {
             os.path.relpath(file_path, source_dir): 'created'
             for file_path in self.watchers[source_dir].file_metadata.keys()
         }
         
-        self.logger.info(f'Found {len(initial_changes)} files to sync initially')
+        self.logger.debug(f'Found {len(initial_changes)} files to sync initially')
         sync_manager.sync_files(initial_changes)
         
         # Initialize metadata for other directories
-        self.logger.info('Initializing metadata for target directories')
+        self.logger.debug('Initializing metadata for target directories')
         for directory in target_dirs:
-            self.logger.info(f'Scanning target directory: {directory}')
+            self.logger.debug(f'Scanning target directory: {directory}')
             self.watchers[directory].scan_directories(directory)
     
     def _watch_directory(self, directory: str):
         """Watch a single directory for changes."""
-        self.logger.info(f'Starting watcher for directory: {directory}')
+        self.logger.debug(f'Starting watcher for directory: {directory}')
         watcher = self.watchers[directory]
         
         while self.running:
@@ -93,7 +100,7 @@ class DirectorySynchronizer:
                 changes = watcher.scan_directories(directory)
                 
                 if changes:
-                    self.logger.info(f'Detected {len(changes)} changes in {directory}')
+                    self.logger.info(f'Synchronizing changes from {directory}')
                     with self.sync_condition:
                         self.is_syncing = True
                     self._handle_changes(directory, changes)
@@ -107,7 +114,7 @@ class DirectorySynchronizer:
     
     def _handle_changes(self, source_dir: str, changes: dict):
         """Handle changes detected in a directory by syncing to all other directories."""
-        self.logger.info(f'Handling changes from {source_dir}')
+        self.logger.debug(f'Handling changes from {source_dir}')
         target_dirs = [d for d in self.directories if d != source_dir]
         sync_manager = SyncManager(source_dir, target_dirs, self.resolution_policy)
         
@@ -118,7 +125,7 @@ class DirectorySynchronizer:
                 for file_path, change_type in changes.items()
             }
             
-            self.logger.info(f'Syncing {len(relative_changes)} changes to {len(target_dirs)} target directories')
+            self.logger.debug(f'Syncing {len(relative_changes)} changes to {len(target_dirs)} target directories')
             for path, change_type in relative_changes.items():
                 self.logger.debug(f'Change detected: {change_type} - {path}')
             
@@ -126,7 +133,7 @@ class DirectorySynchronizer:
             sync_manager.sync_files(relative_changes)
             
             # Update metadata for all directories after sync
-            self.logger.info('Updating metadata for all directories after sync')
+            self.logger.debug('Updating metadata after sync')
             for directory in self.directories:
                 self.logger.debug(f'Refreshing metadata for {directory}')
                 self.watchers[directory].scan_directories(directory)
@@ -145,7 +152,7 @@ class DirectorySynchronizer:
         self.logger.info('Starting directory synchronization')
         self._initialize_metadata()
         
-        self.logger.info('Starting directory watchers')
+        self.logger.debug('Starting directory watchers')
         self.running = True
         
         # Start watching all directories concurrently
@@ -174,7 +181,7 @@ class DirectorySynchronizer:
 
 def main():
     logger = logging.getLogger('MAIN')
-    logger.info('Starting Directory Synchronization Tool')
+    logger.debug('Starting Directory Synchronization Tool')
     
     # Set up argument parser
     parser = argparse.ArgumentParser(
@@ -187,6 +194,9 @@ Examples:
 
     # Sync with newest-wins policy:
     python main.py -p newest /path/to/source /path/to/target1 /path/to/target2
+
+    # Run with debug logging:
+    python main.py --debug /path/to/source /path/to/target1
         '''
     )
 
@@ -195,12 +205,26 @@ Examples:
                         default='manual',
                         help='Conflict resolution policy (default: manual)')
     
+    parser.add_argument('--debug',
+                        action='store_true',
+                        help='Enable debug logging')
+    
     parser.add_argument('directories',
                         nargs='+',
                         help='Directories to sync. First directory is the source.')
 
     args = parser.parse_args()
-    logger.info(f'Parsed command line arguments: {args}')
+
+    # Configure root logger based on debug flag
+    root_logger = logging.getLogger()
+    if args.debug:
+        root_logger.setLevel(logging.DEBUG)
+    else:
+        root_logger.setLevel(logging.INFO)
+
+    logger = logging.getLogger('MAIN')
+    logger.debug('Debug logging enabled')
+    logger.debug(f'Parsed command line arguments: {args}')
 
     # Validate minimum number of directories
     if len(args.directories) < 2:
@@ -213,12 +237,12 @@ Examples:
         'newest': ResolutionPolicy.NEWEST_WINS
     }
     resolution_policy = policy_map[args.policy]
-    logger.info(f'Using resolution policy: {resolution_policy}')
+    logger.debug(f'Using resolution policy: {resolution_policy}')
 
     try:
         # Initialize and start the synchronizer
-        logger.info('Creating DirectorySynchronizer instance')
-        synchronizer = DirectorySynchronizer(args.directories, resolution_policy)
+        logger.debug('Creating DirectorySynchronizer instance')
+        synchronizer = DirectorySynchronizer(args.directories, resolution_policy, args.debug)
         synchronizer.start()
     except KeyboardInterrupt:
         logger.info('Received keyboard interrupt')
