@@ -14,7 +14,7 @@ class SyncManager:
         """
         # Verify source directory exists before proceeding
         if not os.path.exists(source_dir):
-            raise ValueError(f"Source directory does not exist: {source_dir}")
+            raise ValueError(f"[SyncManager] Source directory does not exist: {source_dir}")
         
         # Store the directories and create conflict resolver instance
         self.source_dir = source_dir              # Directory to sync from
@@ -33,104 +33,110 @@ class SyncManager:
         # Set up logging configuration
         self.logger = logging.getLogger(__name__)
         logging.basicConfig(
-            filename='sync_manager.log',    # Log file name
-            level=logging.INFO,             # Log level
-            format='%(asctime)s - %(levelname)s - %(message)s'  # Log message format
+            filename='sync_manager.log',
+            level=logging.INFO,
+            format='%(asctime)s - %(levelname)s - [SyncManager] %(message)s'
         )
+        self.logger.info(f"Initialized SyncManager with source: {source_dir}, targets: {target_dirs}")
+        self.logger.info(f"Using resolution policy: {resolution_policy}")
 
     def sync_files(self, changes: Dict[str, str]) -> None:
         """
         Main method that processes file changes and syncs them to target directories
         """
-        # Record start time and log beginning of sync
         self.sync_stats['start_time'] = datetime.now()
-        self.logger.info(f"Starting sync operation with {len(changes)} changes")
-
-        # Process each changed file
+        self.logger.info(f"Starting sync operation with {len(changes)} changes to process")
+        
         for rel_path, change_type in changes.items():
-            # Convert relative path to full path in source directory
+            self.logger.info(f"Processing change: {change_type} for file: {rel_path}")
             source_path = os.path.join(self.source_dir, rel_path)
-            
-            # Generate full paths for this file in all target directories
             target_paths = [os.path.join(target_dir, rel_path) 
                           for target_dir in self.target_dirs]
             
             try:
-                # Handle file updates (modified or created files)
                 if change_type in ('modified', 'created'):
+                    self.logger.info(f"Handling {change_type} operation for {rel_path}")
                     self._handle_file_update(source_path, target_paths, rel_path)
-                # Handle file deletions
                 elif change_type == 'deleted':
+                    self.logger.info(f"Handling deletion operation for {rel_path}")
                     self._handle_file_deletion(target_paths, rel_path)
                     
             except Exception as e:
-                # Track and log any failures
                 self.sync_stats['failed_operations'] += 1
-                self.logger.error(f"Error syncing {rel_path}: {str(e)}")
+                self.logger.error(f"Operation failed for {rel_path}: {str(e)}")
+                self.logger.exception("Detailed error information:")
 
-        # Record end time and log completion
         self.sync_stats['end_time'] = datetime.now()
-        self.logger.info("Sync operation completed")
+        self.logger.info(f"Sync operation completed. Duration: {self.sync_stats['end_time'] - self.sync_stats['start_time']}")
 
     def _handle_file_update(self, source_path: str, target_paths: List[str], 
                           rel_path: str) -> None:
         """
         Handles updating or creating files, including conflict resolution
         """
-        # Find which target paths already have this file
         existing_targets = [path for path in target_paths if os.path.exists(path)]
         
-        # If file exists in any targets, need to check for conflicts
         if existing_targets:
-            # Combine source and existing target files for conflict resolution
+            self.logger.info(f"Found {len(existing_targets)} existing copies of {rel_path}")
             conflicting_files = [source_path] + existing_targets
+            self.logger.info(f"Initiating conflict resolution for {rel_path}")
             winner, losers = self.conflict_resolver.resolve_conflict(conflicting_files)
             
             self.sync_stats['conflicts_resolved'] += 1
+            self.logger.info(f"Conflict resolved for {rel_path}. Winner: {winner}")
             
-            # If source file won the conflict
             if winner == source_path:
-                # Copy source to all targets
+                self.logger.info(f"Source file won conflict for {rel_path}, copying to all targets")
                 for target_path in target_paths:
+                    self.logger.info(f"Copying {rel_path} to target: {target_path}")
                     if FileOperations.copy_file(source_path, target_path):
                         self.sync_stats['files_synced'] += 1
-            # If a target file won the conflict
+                        self.logger.info(f"Successfully copied {rel_path} to {target_path}")
             else:
-                # Copy winning target back to source
+                self.logger.info(f"Target file won conflict for {rel_path}, synchronizing all copies")
+                self.logger.info(f"Copying winning version back to source: {source_path}")
                 FileOperations.copy_file(winner, source_path)
-                # Copy winning target to other targets (except itself)
+                
                 for target_path in target_paths:
                     if target_path != winner:
+                        self.logger.info(f"Copying winning version to target: {target_path}")
                         if FileOperations.copy_file(winner, target_path):
                             self.sync_stats['files_synced'] += 1
+                            self.logger.info(f"Successfully copied {rel_path} to {target_path}")
         
-        # No existing targets, simply copy source to all targets
         else:
+            self.logger.info(f"No existing copies found for {rel_path}, performing fresh copy")
             for target_path in target_paths:
+                self.logger.info(f"Copying {rel_path} to new target: {target_path}")
                 if FileOperations.copy_file(source_path, target_path):
                     self.sync_stats['files_synced'] += 1
+                    self.logger.info(f"Successfully created new copy at {target_path}")
 
     def _handle_file_deletion(self, target_paths: List[str], rel_path: str) -> None:
         """
         Handles deleting files from target directories
         """
-        # Delete file from each target directory
+        self.logger.info(f"Processing deletion of {rel_path} from {len(target_paths)} targets")
         for target_path in target_paths:
+            self.logger.info(f"Attempting to delete {rel_path} from {target_path}")
             if FileOperations.delete_file(target_path):
                 self.sync_stats['files_synced'] += 1
-                self.logger.info(f"Deleted {rel_path} from {target_path}")
+                self.logger.info(f"Successfully deleted {rel_path} from {target_path}")
+            else:
+                self.logger.warning(f"Failed to delete {rel_path} from {target_path}")
 
     def generate_summary_report(self) -> Dict:
         """
         Creates a report of what happened during the sync
         """
-        # Calculate total duration if start and end times exist
+        self.logger.info("Generating sync summary report")
+        
         duration = None
         if self.sync_stats['start_time'] and self.sync_stats['end_time']:
             duration = (self.sync_stats['end_time'] - 
                        self.sync_stats['start_time']).total_seconds()
+            self.logger.info(f"Total sync duration: {duration} seconds")
 
-        # Compile all statistics into a report dictionary
         report = {
             'start_time': self.sync_stats['start_time'],
             'end_time': self.sync_stats['end_time'],
@@ -142,9 +148,9 @@ class SyncManager:
             'target_directories': self.target_dirs
         }
 
-        # Log each statistic
-        self.logger.info("Sync Summary:")
+        self.logger.info("=== Sync Summary ===")
         for key, value in report.items():
             self.logger.info(f"{key}: {value}")
+        self.logger.info("==================")
 
         return report
