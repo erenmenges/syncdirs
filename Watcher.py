@@ -2,6 +2,7 @@ import os
 import hashlib
 import logging
 from datetime import datetime
+import collections
 
 class Watcher:
     def __init__(self, log_level='basic'):
@@ -23,6 +24,13 @@ class Watcher:
             self.logger.setLevel(logging.DEBUG)
         else:  # basic level
             self.logger.setLevel(logging.INFO)
+            
+        # Add handler if not already present
+        if not self.logger.handlers:
+            handler = logging.StreamHandler()
+            formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+            handler.setFormatter(formatter)
+            self.logger.addHandler(handler)
             
         # Only log initialization in debug mode
         self.logger.debug('Initializing Watcher')
@@ -50,6 +58,7 @@ class Watcher:
         """
         self.logger.debug(f'Starting directory scan: {directory}')  # Moved to debug
         changes = {}
+        existing_files = set()
         
         # Update scan information
         self.last_scanned_directory = os.path.abspath(directory)
@@ -62,6 +71,7 @@ class Watcher:
                 self.logger.debug(f'Scanning directory: {root}')
                 for filename in files:
                     file_path = os.path.join(root, filename)
+                    existing_files.add(file_path)
                     self.logger.debug(f'Processing file: {filename}')
                     
                     try:
@@ -93,13 +103,8 @@ class Watcher:
                         self.logger.error(f'Error processing file {file_path}')  # Simplified error message
                         continue
             
-            # Check for deleted files
+            # Check for deleted files without a second walk
             self.logger.debug('Checking for deleted files')
-            existing_files = set()
-            for root, _, files in os.walk(directory):
-                for filename in files:
-                    existing_files.add(os.path.join(root, filename))
-            
             tracked_files = set(self.file_metadata.keys())
             deleted_files = tracked_files - existing_files
             
@@ -109,8 +114,9 @@ class Watcher:
             
             # Log summary of changes
             if changes:
-                # Only log a summary in basic mode
-                self.logger.info(f'Changes detected: {len(changes)} files ({", ".join(sorted(set(changes.values())))})')
+                change_counts = collections.Counter(changes.values())
+                summary = ', '.join([f"{count} {change_type}" for change_type, count in change_counts.items()])
+                self.logger.info(f'Changes detected: {len(changes)} files ({summary})')
                 # Detailed changes only in debug mode
                 for file_path, change_type in changes.items():
                     self.logger.debug(f'- {change_type}: {file_path}')

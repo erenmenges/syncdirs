@@ -4,21 +4,35 @@ import logging
 from Watcher import Watcher
 
 class FileOperations:
-    # Add log level class variable
-    log_level = "basic"  # Can be "basic" or "debug"
+    # Add class-specific logger
+    logger = logging.getLogger('FileOperations')
+    log_level = "basic"
+    watcher = None  # Class-level Watcher instance
     
     @staticmethod
     def set_log_level(level):
-        """
-        Set the logging level for FileOperations.
-        
-        Args:
-            level (str): Logging level - either "basic" or "debug"
-        """
         if level in ["basic", "debug"]:
             FileOperations.log_level = level
-            logging.info(f"[FileOperations] Log level set to: {level}")
+            # Configure logger level
+            if level == "debug":
+                FileOperations.logger.setLevel(logging.DEBUG)
+            else:
+                FileOperations.logger.setLevel(logging.INFO)
+                
+            # Add handler if not present
+            if not FileOperations.logger.handlers:
+                handler = logging.StreamHandler()
+                formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+                handler.setFormatter(formatter)
+                FileOperations.logger.addHandler(handler)
+                
+            FileOperations.logger.info(f"Log level set to: {level}")
 
+    @staticmethod
+    def initialize_watcher():
+        if FileOperations.watcher is None:
+            FileOperations.watcher = Watcher(log_level=FileOperations.log_level)
+    
     @staticmethod
     def copy_file(source, target):
         """
@@ -32,52 +46,37 @@ class FileOperations:
             bool: True if copy successful, False otherwise
         """
         try:
-            # Basic level logging - only start of operation
             if FileOperations.log_level == "basic":
-                logging.info(f"[FileOperations] Copying file")
+                FileOperations.logger.info("Copying file")
             else:
-                logging.debug(f"[FileOperations] Copying file from {source} to {target}")
+                FileOperations.logger.debug(f"Copying file from {source} to {target}")
             
             if not os.path.exists(source):
-                logging.error(f"[FileOperations] Source file does not exist")  # Keep error in both modes
+                FileOperations.logger.error("Source file does not exist")
                 return False
                 
-            # Debug level logging
-            if FileOperations.log_level == "debug":
-                source_size = os.path.getsize(source)
-                logging.debug(f"[FileOperations] Source file size: {source_size} bytes")
-            
             # Create target directory if it doesn't exist
             os.makedirs(os.path.dirname(target), exist_ok=True)
             
-            # Use explicit open and write to ensure content is copied
-            with open(source, 'rb') as src_file:
-                with open(target, 'wb') as dst_file:
-                    dst_file.write(src_file.read())
+            # Use shutil.copy2 for efficient copying with metadata preservation
+            shutil.copy2(source, target)
             
             # Verify the copy
             if os.path.exists(target):
                 if FileOperations.log_level == "debug":
                     target_size = os.path.getsize(target)
                     source_size = os.path.getsize(source)
-                    logging.debug(f"[FileOperations] Target file size: {target_size} bytes")
+                    FileOperations.logger.debug(f"Target file size: {target_size} bytes")
                     if target_size != source_size:
-                        logging.error(f"[FileOperations] File size mismatch! Source: {source_size}, Target: {target_size}")
+                        FileOperations.logger.error(f"File size mismatch! Source: {source_size}, Target: {target_size}")
                         return False
-            
-            # Copy metadata (timestamps, permissions)
-            shutil.copystat(source, target)
-            
-            # Success logging based on level
-            if FileOperations.log_level == "debug":
-                logging.debug(f"[FileOperations] Successfully copied file from {source} to {target}")
             
             return True
             
         except (IOError, OSError) as e:
-            logging.error(f"[FileOperations] Copy failed")  # Simplified error in basic mode
+            FileOperations.logger.error("Copy failed")
             if FileOperations.log_level == "debug":
-                logging.debug(f"[FileOperations] Copy error details: {str(e)}")
+                FileOperations.logger.debug(f"Copy error details: {str(e)}")
             return False
 
     @staticmethod
@@ -92,28 +91,31 @@ class FileOperations:
             bool: True if deletion successful, False otherwise
         """
         try:
-            # Basic level logging - only start of operation
             if FileOperations.log_level == "basic":
-                logging.info(f"[FileOperations] Deleting file")
+                FileOperations.logger.info("Deleting file")
             else:
-                logging.debug(f"[FileOperations] Deleting file: {file_path}")
+                FileOperations.logger.debug(f"Deleting file: {file_path}")
             
-            if os.path.exists(file_path):
-                if FileOperations.log_level == "debug":
-                    file_size = os.path.getsize(file_path)
-                    logging.debug(f"[FileOperations] Deleting file of size: {file_size} bytes")
-                
-                os.remove(file_path)
-                return True
-            else:
-                if FileOperations.log_level == "debug":
-                    logging.debug(f"[FileOperations] File not found for deletion")
+            if not os.path.exists(file_path):
+                FileOperations.logger.error("File not found")  # More specific basic error
+                return False
+            
+            if not os.access(file_path, os.W_OK):
+                FileOperations.logger.error("Permission denied")  # Handle permission errors specifically
                 return False
                 
-        except (IOError, OSError) as e:
-            logging.error(f"[FileOperations] Delete failed")  # Simplified error in basic mode
+            os.remove(file_path)
+            return True
+                
+        except PermissionError as e:
+            FileOperations.logger.error("Permission denied while deleting file")
             if FileOperations.log_level == "debug":
-                logging.debug(f"[FileOperations] Delete error details: {str(e)}")
+                FileOperations.logger.debug(f"Permission error details: {str(e)}")
+            return False
+        except OSError as e:
+            FileOperations.logger.error("Failed to delete file")
+            if FileOperations.log_level == "debug":
+                FileOperations.logger.debug(f"Delete error details: {str(e)}")
             return False
 
     @staticmethod
@@ -130,30 +132,30 @@ class FileOperations:
             bool: True if hashes match, False otherwise
         """
         try:
-            # Basic level logging - only start of operation
             if FileOperations.log_level == "basic":
-                logging.info(f"[FileOperations] Validating file")
+                FileOperations.logger.info("Validating file")
             else:
-                logging.debug(f"[FileOperations] Validating file: {file_path}")
+                FileOperations.logger.debug(f"Validating file: {file_path}")
             
             if not os.path.exists(file_path):
-                logging.error(f"[FileOperations] File not found")  # Keep error in both modes
+                FileOperations.logger.error("File not found")
                 return False
-                
-            watcher = Watcher()
-            actual_hash = watcher.get_file_hash(file_path)
+            
+            # Initialize watcher if needed
+            FileOperations.initialize_watcher()
+            actual_hash = FileOperations.watcher.get_file_hash(file_path)
             
             if actual_hash == expected_hash:
                 if FileOperations.log_level == "debug":
-                    logging.debug(f"[FileOperations] Hash match - Expected: {expected_hash}, Actual: {actual_hash}")
+                    FileOperations.logger.debug(f"[FileOperations] Hash match - Expected: {expected_hash}, Actual: {actual_hash}")
                 return True
             else:
                 if FileOperations.log_level == "debug":
-                    logging.debug(f"[FileOperations] Hash mismatch - Expected: {expected_hash}, Actual: {actual_hash}")
+                    FileOperations.logger.debug(f"[FileOperations] Hash mismatch - Expected: {expected_hash}, Actual: {actual_hash}")
                 return False
                 
         except (IOError, OSError) as e:
-            logging.error(f"[FileOperations] Validation failed")  # Simplified error in basic mode
+            FileOperations.logger.error("Validation failed")  # Simplified error in basic mode
             if FileOperations.log_level == "debug":
-                logging.debug(f"[FileOperations] Validation error details: {str(e)}")
+                FileOperations.logger.debug(f"[FileOperations] Validation error details: {str(e)}")
             return False
